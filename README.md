@@ -31,7 +31,7 @@ Este projeto fornece uma simulação para análise de desempenho de um protocolo
 
 1. **Clone o repositório:**
    ```bash
-   git clone https://github.com/seu-usuario/simulacao_roteamento_rssf.git
+   git clone https://github.com/arturch2011/simulacao_roteamento_rssf.git
    cd simulacao_roteamento_rssf
    ```
 
