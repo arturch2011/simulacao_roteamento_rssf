@@ -34,11 +34,47 @@ def main():
     media_saltos = sum(metricas['contagens_de_saltos']) / len(metricas['contagens_de_saltos'])
     print(f"Média de Saltos: {media_saltos:.2f}")
 
+    print(f"\n--- Metricas da Rede ---")
+    if not metricas['is_connected']:
+        print("Aviso: A rede não está totalmente conectada.")
+        print(f"Diâmetro do Maior Componente Conectado: {metricas['diametro_rede']}")
+    else:
+        print(f"Diâmetro da Rede: {metricas['diametro_rede']}")
+
     print("\n--- Nós de Gargalo ---")
     gargalos = sorted(metricas['contagens_de_encaminhamento'].items(), key=lambda x: x[1], reverse=True)[:5]
     for no, contagem in gargalos:
         print(f"Nó {no}: {contagem} encaminhamentos")
 
+    print("\n--- Top 5 Nós por Centralidade de Grau ---")
+    centralidade_grau = sorted(metricas['centralidade_de_grau'].items(), key=lambda x: x[1], reverse=True)[:5]
+    for no, centralidade in centralidade_grau:
+        print(f"Nó {no}: {centralidade:.4f}")
+
+    print("\n--- Top 5 Nós por Centralidade de Intermediação (Pontes) ---")
+    centralidade_intermediacao = sorted(metricas['centralidade_de_intermediacao'].items(), key=lambda x: x[1], reverse=True)[:5]
+    for no, centralidade in centralidade_intermediacao:
+        print(f"Nó {no}: {centralidade:.4f}")
+
+    print("\n--- Top 5 Nós por Centralidade de Proximidade ---")
+    centralidade_proximidade = sorted(metricas['centralidade_de_proximidade'].items(), key=lambda x: x[1], reverse=True)[:5]
+    for no, centralidade in centralidade_proximidade:
+        print(f"Nó {no}: {centralidade:.4f}")
+
+    print("\n--- Top 5 Nós por Centralidade de Autovetor (Influência) ---")
+    centralidade_autovetor = sorted(metricas['centralidade_de_autovetor'].items(), key=lambda x: x[1], reverse=True)[:5]
+    for no, centralidade in centralidade_autovetor:
+        print(f"Nó {no}: {centralidade:.4f}")
+
+    print("\n--- Top 5 Nós por Coeficiente de Agrupamento (Cluster) ---")
+    centralidade_clique = sorted(metricas['centralidade_de_clique'].items(), key=lambda x: x[1], reverse=True)[:5]
+    for no, centralidade in centralidade_clique:
+        print(f"Nó {no}: {centralidade:.4f}")
+
+    print("\n--- Top 5 Nós por PageRank ---")
+    centralidade_pagerank = sorted(metricas['centralidade_de_pagerank'].items(), key=lambda x: x[1], reverse=True)[:5]
+    for no, centralidade in centralidade_pagerank:
+        print(f"Nó {no}: {centralidade:.4f}")
     # 4. Visualiza os resultados
     plotar_rede(G)
     plotar_metricas(metricas)

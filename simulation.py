@@ -1,6 +1,8 @@
+import networkx
 import simpy
 import random
 import copy
+import scipy
 
 # Estado global para a simulação
 metricas = {}
@@ -14,7 +16,7 @@ class Pacote:
         self.tempo_de_criacao = tempo_de_criacao
         self.contagem_de_saltos = 0
 
-def gerador_de_pacotes(env, no, G, id_estacao_base):
+def gerador_de_pacotes(env: simpy.Environment, no: int, G: networkx.Graph, id_estacao_base: int):
     """Um processo SimPy para um sensor gerar pacotes."""
     while True:
         # Espera um tempo aleatório antes de gerar um novo pacote
@@ -28,7 +30,7 @@ def gerador_de_pacotes(env, no, G, id_estacao_base):
         )
         env.process(roteador(env, no, pacote, G))
 
-def roteador(env, no, pacote, G):
+def roteador(env: simpy.Environment, no: int, pacote: Pacote, G: networkx.Graph):
     """Um processo SimPy que implementa a lógica de roteamento por inundação."""
     # Se este nó já encaminhou este pacote, descarte-o.
     if pacote.id in pacotes_encaminhados_por_no.get(no, set()):
@@ -57,7 +59,7 @@ def roteador(env, no, pacote, G):
         novo_pacote.contagem_de_saltos += 1
         env.process(roteador(env, vizinho, novo_pacote, G))
 
-def executar_simulacao(G, tempo_simulacao):
+def executar_simulacao(G: networkx.Graph, tempo_simulacao: int):
     """
     Configura e executa o ambiente SimPy.
 
@@ -76,8 +78,41 @@ def executar_simulacao(G, tempo_simulacao):
         'latencias': [],
         'contagens_de_saltos': [],
         'contagens_de_encaminhamento': {},
+        'centralidade_de_grau': {},
+        'centralidade_de_intermediacao': {},
+        'centralidade_de_proximidade': {},
+        'centralidade_de_autovetor': {},
+        'centralidade_de_clique': {},
+        'centralidade_de_katz': {},
+        'centralidade_de_pagerank': {},
+        'diametro_rede': 0,
+        'is_connected': True
     }
     pacotes_encaminhados_por_no = {}
+
+    # Calcular métricas estruturais do grafo
+    metricas['centralidade_de_grau'] = networkx.degree_centrality(G)
+    metricas['centralidade_de_intermediacao'] = networkx.betweenness_centrality(G)
+    metricas['centralidade_de_proximidade'] = networkx.closeness_centrality(G)
+    try:
+        metricas['centralidade_de_autovetor'] = networkx.eigenvector_centrality(G, max_iter=1000, tol=1e-05)
+    except networkx.PowerIterationFailedConvergence:
+        print("Aviso: O cálculo da centralidade de autovetor não convergiu. Os resultados podem ser imprecisos.")
+        metricas['centralidade_de_autovetor'] = {node: 0.0 for node in G.nodes()}
+    metricas['centralidade_de_clique'] = networkx.clustering(G)
+    # metricas['centralidade_de_katz'] = networkx.katz_centrality(G)
+    metricas['centralidade_de_pagerank'] = networkx.pagerank(G)
+
+    if networkx.is_connected(G):
+        metricas['diametro_rede'] = networkx.diameter(G)
+    else: 
+        metricas['is_connected'] = False
+        componentes_conectados = list(networkx.connected_components(G))
+        if componentes_conectados:
+            componente_maior = max(componentes_conectados, key=len)
+            subgrafo = G.subgraph(componente_maior)
+            metricas['diametro_rede'] = networkx.diameter(subgrafo)
+
 
     env = simpy.Environment()
     
