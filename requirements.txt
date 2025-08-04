@@ -2,3 +2,5 @@ simpy
 networkx
 matplotlib
 numpy
+streamlit
+pandas
