@@ -1,41 +1,93 @@
-import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 import networkx as nx
+import matplotlib.pyplot as plt
 
 def plotar_rede(G):
     """
-    Cria e retorna uma figura Matplotlib da topologia da rede.
-
-    Args:
-        G (networkx.Graph): O grafo da rede.
-
-    Returns:
-        matplotlib.figure.Figure: A figura contendo o gráfico da rede.
+    Cria e retorna uma figura Plotly interativa da topologia da rede.
     """
-    fig, ax = plt.subplots(figsize=(10, 10))
     pos = nx.get_node_attributes(G, 'pos')
     
-    # Define a cor com base no tipo de nó, com um padrão para tipos não especificados
-    cores_nos = []
-    for n in G.nodes():
-        node_type = G.nodes[n].get('type', 'sensor') # Padrão para 'sensor' se o tipo não existir
-        if node_type == 'base_station':
-            cores_nos.append('red')
-        else:
-            cores_nos.append('blue')
+    edge_x = []
+    edge_y = []
+    for edge in G.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
 
-    nx.draw(G, pos, ax=ax, with_labels=True, node_size=50, node_color=cores_nos, font_size=8)
-    ax.set_title("Topologia da Rede")
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        line=dict(width=0.5, color='#888'),
+        hoverinfo='none',
+        mode='lines')
+
+    node_x = []
+    node_y = []
+    node_text = []
+    node_color = []
+
+    for node in G.nodes():
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        node_info = f"ID: {node}<br>"
+        node_info += f"Tipo: {G.nodes[node].get('type', 'sensor')}"
+        node_text.append(node_info)
+        
+        if G.nodes[node].get('type') == 'base_station':
+            node_color.append('red')
+        else:
+            node_color.append('blue')
+
+
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode='markers',
+        hoverinfo='text',
+        text=node_text,
+        customdata=[(node) for node in G.nodes()], # Adiciona o ID do nó
+        marker=dict(
+            showscale=True,
+            colorscale='YlGnBu',
+            reversescale=True,
+            color=[],
+            size=10,
+            colorbar=dict(
+                thickness=15,
+                title='Node Connections',
+                xanchor='left',
+                title_side='right'  # Corrigido para title_side
+            ),
+            line_width=2))
+    
+    node_adjacencies = []
+    for node, adjacencies in enumerate(G.adjacency()):
+        node_adjacencies.append(len(adjacencies[1]))
+
+    node_trace.marker.color = node_adjacencies
+    node_trace.marker.size = [s * 2 for s in node_adjacencies]
+
+
+    fig = go.Figure(data=[edge_trace, node_trace],
+                 layout=go.Layout(
+                    title=dict(text='<br>Topologia da Rede Interativa', font=dict(size=16)),
+                    showlegend=False,
+                    hovermode='closest',
+                    margin=dict(b=20,l=5,r=5,t=40),
+                    annotations=[ dict(
+                        text="Python code: <a href='https://plotly.com/ipython-notebooks/network-graphs/'> https://plotly.com/ipython-notebooks/network-graphs/</a>",
+                        showarrow=False,
+                        xref="paper", yref="paper",
+                        x=0.005, y=-0.002 ) ],
+                    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                    yaxis=dict(showgrid=False, zeroline=False, showticklabels=False))
+                    )
     return fig
 
 def plotar_metricas(metrics):
     """
     Cria e retorna uma figura Matplotlib com as métricas da simulação.
-
-    Args:
-        metrics (dict): Um dicionário contendo as métricas da simulação.
-
-    Returns:
-        matplotlib.figure.Figure: A figura contendo os gráficos de métricas.
     """
     fig, axes = plt.subplots(1, 3, figsize=(18, 5))
 

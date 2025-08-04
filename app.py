@@ -1,6 +1,7 @@
-
 import streamlit as st
 import pandas as pd
+import plotly.graph_objects as go
+from streamlit_plotly_events import plotly_events
 from network_generator import (
     criar_grafo_rssf,
     criar_grafo_aleatorio,
@@ -13,6 +14,16 @@ from visualization import plotar_rede, plotar_metricas
 st.set_page_config(layout="wide")
 
 st.title("Simulador de Roteamento em Redes Complexas")
+
+# --- Funções Auxiliares ---
+def rodar_simulacao(G, tempo_simulacao):
+    """Executa a simulação e armazena os resultados no estado da sessão."""
+    with st.spinner("Executando a simulação..."):
+        metricas = executar_simulacao(G, tempo_simulacao)
+        st.session_state['resultados'] = {
+            'G': G,
+            'metricas': metricas
+        }
 
 # --- Barra Lateral de Configuração ---
 st.sidebar.header("Parâmetros da Simulação")
@@ -32,14 +43,14 @@ tipo_rede_selecionado = st.sidebar.selectbox(
 # Parâmetros comuns
 num_nos = st.sidebar.slider("Número de Nós", 5, 500, 100)
 tam_area = st.sidebar.slider("Tamanho da Área", 50, 200, 100)
-tempo_simulacao = st.sidebar.slider("Tempo de Simulação", 10, 500, 100)
+num_estacoes_base = st.sidebar.slider("Número de Estações Base", 0, 10, 1)
+tempo_simulacao = st.sidebar.slider("Tempo de Simulação", 0, 500, 100)
 
 params = {}
 
 # Parâmetros específicos do tipo de rede
 if tipo_rede_map[tipo_rede_selecionado] == 'rssf':
     params['raio_comunicacao'] = st.sidebar.slider("Raio de Comunicação", 5, 50, 20)
-    params['num_estacoes_base'] = st.sidebar.slider("Número de Estações Base", 0, 10, 1)
 elif tipo_rede_map[tipo_rede_selecionado] == 'aleatoria':
     params['p_conexao'] = st.sidebar.slider("Probabilidade de Conexão (p)", 0.0, 1.0, 0.1, 0.01)
 elif tipo_rede_map[tipo_rede_selecionado] == 'barabasi_albert':
@@ -49,29 +60,22 @@ elif tipo_rede_map[tipo_rede_selecionado] == 'watts_strogatz':
     params['p_reconectar'] = st.sidebar.slider("Probabilidade de Reconexão (p)", 0.0, 1.0, 0.1, 0.01)
 
 # Botão para iniciar a simulação
-if st.sidebar.button("Iniciar Simulação"):
-    with st.spinner("Criando a rede e executando a simulação..."):
-        # 1. Cria o grafo
+if st.sidebar.button("Iniciar Nova Simulação"):
+    with st.spinner("Criando a rede..."):
         G = None
         tipo_rede = tipo_rede_map[tipo_rede_selecionado]
         
         if tipo_rede == 'rssf':
-            G = criar_grafo_rssf(num_nos, tam_area, params['raio_comunicacao'], params['num_estacoes_base'])
+            G = criar_grafo_rssf(num_nos, tam_area, params['raio_comunicacao'], num_estacoes_base)
         elif tipo_rede == 'aleatoria':
-            G = criar_grafo_aleatorio(num_nos, params['p_conexao'], tam_area)
+            G = criar_grafo_aleatorio(num_nos, params['p_conexao'], tam_area, num_estacoes_base)
         elif tipo_rede == 'barabasi_albert':
-            G = criar_grafo_barabasi_albert(num_nos, params['m_conexoes'], tam_area)
+            G = criar_grafo_barabasi_albert(num_nos, params['m_conexoes'], tam_area, num_estacoes_base)
         elif tipo_rede == 'watts_strogatz':
-            G = criar_grafo_watts_strogatz(num_nos, params['k_vizinhos'], params['p_reconectar'], tam_area)
+            G = criar_grafo_watts_strogatz(num_nos, params['k_vizinhos'], params['p_reconectar'], tam_area, num_estacoes_base)
 
-        # 2. Executa a simulação
-        metricas = executar_simulacao(G, tempo_simulacao)
-        
-        # Armazena os resultados no estado da sessão
-        st.session_state['resultados'] = {
-            'G': G,
-            'metricas': metricas
-        }
+        rodar_simulacao(G, tempo_simulacao)
+        st.session_state['no_selecionado'] = None # Limpa a seleção de nó
 
 # --- Exibição dos Resultados ---
 st.header("Resultados da Simulação")
@@ -81,30 +85,60 @@ if 'resultados' in st.session_state:
     G = resultados['G']
     metricas = resultados['metricas']
 
-    # Colunas para métricas principais e topologia
     col1, col2 = st.columns([1, 2])
-
-    with col1:
-        st.subheader("Métricas de Desempenho")
-        
-        taxa_entrega = (metricas['pacotes_entregues'] / metricas['pacotes_gerados']) * 100 if metricas['pacotes_gerados'] > 0 else 0
-        st.metric("Taxa de Entrega", f"{taxa_entrega:.2f}%")
-
-        latencia_media = sum(metricas['latencias']) / len(metricas['latencias']) if metricas['latencias'] else 0
-        st.metric("Latência Média", f"{latencia_media:.2f}s")
-
-        saltos_medios = sum(metricas['contagens_de_saltos']) / len(metricas['contagens_de_saltos']) if metricas['contagens_de_saltos'] else 0
-        st.metric("Média de Saltos", f"{saltos_medios:.2f}")
-        
-        st.subheader("Métricas da Rede")
-        st.metric("Diâmetro da Rede", f"{metricas['diametro_rede']}")
-        if not metricas['is_connected']:
-            st.warning("A rede não está totalmente conectada.")
 
     with col2:
         st.subheader("Visualização da Rede")
         fig_rede = plotar_rede(G)
-        st.pyplot(fig_rede)
+        # Usa plotly_events para capturar cliques
+        selected_points = plotly_events(fig_rede, click_event=True, hover_event=False, select_event=False)
+
+        if selected_points:
+            # Pega o índice do ponto clicado
+            point_index = selected_points[0]['pointIndex']
+            # Obtém a lista de nós na mesma ordem que no gráfico
+            nodes_list = list(G.nodes())
+            # Pega o ID do nó usando o índice
+            node_id = nodes_list[point_index]
+            st.session_state['no_selecionado'] = node_id
+
+
+    with col1:
+        st.subheader("Métricas de Desempenho")
+        if metricas.get('pacotes_gerados', 0) > 0:
+            taxa_entrega = (metricas.get('pacotes_entregues', 0) / metricas['pacotes_gerados']) * 100
+            st.metric("Taxa de Entrega", f"{taxa_entrega:.2f}%")
+            latencia_media = sum(metricas.get('latencias', [0])) / len(metricas.get('latencias', [1]))
+            st.metric("Latência Média", f"{latencia_media:.2f}s")
+            saltos_medios = sum(metricas.get('contagens_de_saltos', [0])) / len(metricas.get('contagens_de_saltos', [1]))
+            st.metric("Média de Saltos", f"{saltos_medios:.2f}")
+        else:
+            st.info("A simulação de pacotes não foi executada.")
+        
+        st.subheader("Métricas da Rede")
+        st.metric("Diâmetro da Rede", f"{metricas.get('diametro_rede', 'N/A')}")
+        if not metricas.get('is_connected', True):
+            st.warning("A rede não está totalmente conectada.")
+
+        # --- Interatividade com o Grafo ---
+        st.subheader("Nó Selecionado")
+        
+        no_selecionado = st.session_state.get('no_selecionado')
+
+        if no_selecionado is not None:
+            st.write(f"**Informações do Nó {no_selecionado}:**")
+            node_data = G.nodes[no_selecionado]
+            st.json(node_data)
+
+            if st.button(f"Remover Nó {no_selecionado} e Refazer Simulação"):
+                G.remove_node(no_selecionado)
+                st.session_state['no_selecionado'] = None # Limpa a seleção
+                st.success(f"Nó {no_selecionado} removido.")
+                rodar_simulacao(G, tempo_simulacao)
+                st.rerun() # Força a atualização da UI
+        else:
+            st.info("Clique em um nó no grafo para ver suas informações.")
+
 
     st.subheader("Gráficos de Métricas da Simulação")
     fig_metricas = plotar_metricas(metricas)
@@ -112,7 +146,6 @@ if 'resultados' in st.session_state:
 
     st.subheader("Análise de Centralidade e Nós Importantes")
     
-    # Prepara os dados para as tabelas
     def criar_df_centralidade(metrica, nome_coluna):
         if not metrica:
             return pd.DataFrame(columns=['Nó', nome_coluna])
@@ -121,10 +154,10 @@ if 'resultados' in st.session_state:
         df['Nó'] = df['Nó'].astype(str)
         return df.head(10)
 
-    df_grau = criar_df_centralidade(metricas['centralidade_de_grau'], 'Centralidade de Grau')
-    df_intermediacao = criar_df_centralidade(metricas['centralidade_de_intermediacao'], 'Centralidade de Intermediação')
-    df_proximidade = criar_df_centralidade(metricas['centralidade_de_proximidade'], 'Centralidade de Proximidade')
-    df_gargalos = criar_df_centralidade(metricas['contagens_de_encaminhamento'], 'Contagem de Encaminhamentos')
+    df_grau = criar_df_centralidade(metricas.get('centralidade_de_grau', {}), 'Centralidade de Grau')
+    df_intermediacao = criar_df_centralidade(metricas.get('centralidade_de_intermediacao', {}), 'Centralidade de Intermediação')
+    df_proximidade = criar_df_centralidade(metricas.get('centralidade_de_proximidade', {}), 'Centralidade de Proximidade')
+    df_gargalos = criar_df_centralidade(metricas.get('contagens_de_encaminhamento', {}), 'Contagem de Encaminhamentos')
 
     c1, c2 = st.columns(2)
     with c1:
@@ -139,4 +172,4 @@ if 'resultados' in st.session_state:
         st.dataframe(df_gargalos)
 
 else:
-    st.info("Configure os parâmetros na barra lateral e clique em 'Iniciar Simulação' para ver os resultados.")
+    st.info("Configure os parâmetros na barra lateral e clique em 'Iniciar Nova Simulação' para ver os resultados.")
